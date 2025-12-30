@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "eslint"
+    "dev": "PATH=$HOME/.nvm/versions/node/v22.21.1/bin:$PATH next dev",
+    "build": "PATH=$HOME/.nvm/versions/node/v22.21.1/bin:$PATH next build",
+    "start": "PATH=$HOME/.nvm/versions/node/v22.21.1/bin:$PATH next start",
+    "lint": "PATH=$HOME/.nvm/versions/node/v22.21.1/bin:$PATH eslint"
   },
   "dependencies": {
     "next": "16.1.1",
