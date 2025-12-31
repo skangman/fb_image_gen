@@ -62,6 +62,28 @@ const FONT_WEIGHT_OPTIONS = [
   { weight: 600, label: "SemiBold" },
 ];
 
+const INITIAL_LOGO_SETTINGS = {
+  size: 120,
+  opacity: 0.35,
+  blur: 1,
+  padding: 40,
+};
+
+const createInitialFontStyle = (): FontStyle => ({
+  size: 54,
+  lineHeight: 1.22,
+  paddingX: 80,
+  paddingY: 90,
+  fontWeight: 700,
+  fill: "#F5F7FF",
+  stroke: "#7A0D1B",
+  strokeWidth: 3,
+  shadowColor: "rgba(0,0,0,0.55)",
+  shadowBlur: 14,
+  shadowOffsetY: 6,
+  fontFamily: SARABUN_STACK,
+});
+
 type RGB = { r: number; g: number; b: number };
 
 type FontStyle = {
@@ -200,12 +222,7 @@ export default function ImageComposer() {
   const [fileName, setFileName] = useState<string>("fb-post-960x1200.png");
   const [preset, setPreset] = useState<PresetMode>("adaptive");
   const [logoUrl, setLogoUrl] = useState("");
-  const [logoSettings, setLogoSettings] = useState({
-    size: 120,
-    opacity: 0.35,
-    blur: 1,
-    padding: 40,
-  });
+  const [logoSettings, setLogoSettings] = useState(INITIAL_LOGO_SETTINGS);
 
   // ข้อความในภาพ
   const [text, setText] = useState(DEFAULT_TEXT);
@@ -215,20 +232,9 @@ export default function ImageComposer() {
   const [aiError, setAiError] = useState("");
 
   // สไตล์ตัวอักษร (คงโทนนักรบ/คม)
-  const [fontStyle, setFontStyle] = useState<FontStyle>({
-    size: 54,
-    lineHeight: 1.22,
-    paddingX: 80,
-    paddingY: 90,
-    fontWeight: 700,
-    fill: "#F5F7FF",
-    stroke: "#7A0D1B",
-    strokeWidth: 3,
-    shadowColor: "rgba(0,0,0,0.55)",
-    shadowBlur: 14,
-    shadowOffsetY: 6,
-    fontFamily: SARABUN_STACK,
-  });
+  const [fontStyle, setFontStyle] = useState<FontStyle>(() =>
+    createInitialFontStyle()
+  );
 
   function wrapText(
     ctx: CanvasRenderingContext2D,
@@ -503,13 +509,16 @@ export default function ImageComposer() {
       drawFontSize -= 2;
     }
 
-    const lineHeights = lines.map((ln) =>
-      (ln.trim() ? 1 : 0.55) * drawFontSize * fontStyle.lineHeight
+    const lineHeights = lines.map(
+      (ln) => (ln.trim() ? 1 : 0.55) * drawFontSize * fontStyle.lineHeight
     );
     const totalTextHeight = lineHeights.reduce((sum, h) => sum + h, 0);
     const rawStartY = H - fontStyle.paddingY - totalTextHeight / 2;
     const minStart = drawFontSize * 0.75;
-    const maxStart = Math.max(minStart, H - totalTextHeight - drawFontSize * 0.4);
+    const maxStart = Math.max(
+      minStart,
+      H - totalTextHeight - drawFontSize * 0.4
+    );
     const startY = Math.min(Math.max(rawStartY, minStart), maxStart);
 
     ctx.font = `${fontStyle.fontWeight} ${drawFontSize}px ${fontStyle.fontFamily}`;
@@ -651,6 +660,20 @@ export default function ImageComposer() {
     if (!file) return;
     const url = URL.createObjectURL(file);
     setLogoUrl(url);
+  }
+
+  function resetAll() {
+    setImageUrl("");
+    setFileName("fb-post-960x1200.png");
+    setPreset("adaptive");
+    setLogoUrl("");
+    setLogoSettings({ ...INITIAL_LOGO_SETTINGS });
+    setText(DEFAULT_TEXT);
+    setCaption(DEFAULT_CAPTION);
+    setCopyMsg("");
+    setAiError("");
+    setAiLoading(false);
+    setFontStyle(createInitialFontStyle());
   }
 
   useEffect(() => {
@@ -840,7 +863,7 @@ export default function ImageComposer() {
             <div className="text-sm font-semibold text-white">
               สไตล์ตัวหนังสือ
             </div>
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {[
                 { key: "adaptive", label: "สุ่มตามพื้นหลัง" },
                 { key: "gold", label: "ทอง-เหลือง" },
@@ -851,7 +874,9 @@ export default function ImageComposer() {
                 <button
                   key={opt.key}
                   onClick={() => setPreset(opt.key as PresetMode)}
-                  className={`rounded-xl px-3 py-2 text-sm font-semibold ${
+                  className={`rounded-xl px-3 py-2 ${
+                    opt.label.length > 10 ? "text-xs" : "text-sm"
+                  } font-semibold ${
                     preset === opt.key
                       ? "bg-emerald-500 text-black"
                       : "bg-white/10 text-white hover:bg-white/15"
@@ -949,7 +974,8 @@ export default function ImageComposer() {
               className="w-full accent-emerald-400"
             />
             <div className="text-xs text-white/60">
-              ปรับค่า 0 (ล่าง) ถึง 1100 (บน): {Math.round(fontStyle.paddingY)} px
+              ปรับค่า 0 (ล่าง) ถึง 1100 (บน): {Math.round(fontStyle.paddingY)}{" "}
+              px
             </div>
           </div>
 
@@ -957,9 +983,9 @@ export default function ImageComposer() {
           <div className="flex gap-2 pt-1">
             <button
               className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-black hover:opacity-90"
-              onClick={() => draw()}
+              onClick={resetAll}
             >
-              Render ใหม่
+              Reset All
             </button>
 
             <button
