@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Sarabun } from "next/font/google";
+import { Kanit, Prompt as PromptFont, Sarabun } from "next/font/google";
 
 const DEFAULT_TEXT = "พิมพ์ข้อความตรงนี้…";
 const DEFAULT_CAPTION = "แคปชั่นโพสต์ใหม่....";
@@ -10,20 +10,56 @@ const THAI_FONT_FALLBACK =
   '"Sarabun", "Noto Sans Thai", "Kanit", "Sukhumvit Set", "Prompt", "Maitree", "Pridi", system-ui, -apple-system, "Tahoma", "Arial", sans-serif';
 
 const sarabun = Sarabun({
-  weight: ["600", "700"],
+  weight: ["600", "700", "800"],
   subsets: ["latin", "thai"],
   display: "swap",
 });
 
-const FONT_CHOICES = [
-  "Sarabun",
-  "Kanit",
-  "Pridi",
-  "Athiti",
-  "Prompt",
-  "Maitree",
-  "Bai Jamjuree",
-  "Anuphan",
+const kanit = Kanit({
+  weight: ["600", "700", "800"],
+  subsets: ["latin", "thai"],
+  display: "swap",
+});
+
+const promptFont = PromptFont({
+  weight: ["600", "700", "800"],
+  subsets: ["latin", "thai"],
+  display: "swap",
+});
+
+const buildStackFromFont = (
+  font: { style?: { fontFamily?: string } },
+  fallbackName: string
+) =>
+  font?.style?.fontFamily
+    ? `${font.style.fontFamily}, ${THAI_FONT_FALLBACK}`
+    : `"${fallbackName}", ${THAI_FONT_FALLBACK}`;
+
+const SARABUN_STACK = buildStackFromFont(sarabun, "Sarabun");
+const KANIT_STACK = buildStackFromFont(kanit, "Kanit");
+const PROMPT_STACK = buildStackFromFont(promptFont, "Prompt");
+
+const FONT_OPTIONS = [
+  {
+    key: "sarabun",
+    label: "Sarabun",
+    stack: SARABUN_STACK,
+    className: sarabun.className,
+  },
+  {
+    key: "kanit",
+    label: "Kanit",
+    stack: KANIT_STACK,
+    className: kanit.className,
+  },
+];
+
+const FONT_STACK_CHOICES = FONT_OPTIONS.map((opt) => opt.stack);
+
+const FONT_WEIGHT_OPTIONS = [
+  { weight: 800, label: "Extra Bold" },
+  { weight: 700, label: "Bold" },
+  { weight: 600, label: "SemiBold" },
 ];
 
 type RGB = { r: number; g: number; b: number };
@@ -49,12 +85,7 @@ type ImageTone = {
   isDark: boolean;
 };
 
-type PresetMode = "adaptive" | "gold" | "strike" | "banner";
-
-const SARABUN_STACK =
-  (sarabun.style.fontFamily &&
-    `${sarabun.style.fontFamily}, ${THAI_FONT_FALLBACK}`) ||
-  `"Sarabun", ${THAI_FONT_FALLBACK}`;
+type PresetMode = "adaptive" | "gold" | "strike" | "banner" | "mono";
 
 const clamp = (v: number, min = 0, max = 255) =>
   Math.min(max, Math.max(min, v));
@@ -125,12 +156,9 @@ function analyzeImageColors(image: HTMLImageElement): ImageTone | null {
   };
 }
 
-const buildFontStack = (primary?: string) =>
-  primary ? `"${primary}", ${THAI_FONT_FALLBACK}` : THAI_FONT_FALLBACK;
-
 const pickRandomFontStack = () => {
-  const idx = Math.floor(Math.random() * FONT_CHOICES.length);
-  return buildFontStack(FONT_CHOICES[idx]);
+  const idx = Math.floor(Math.random() * FONT_STACK_CHOICES.length);
+  return FONT_STACK_CHOICES[idx] || SARABUN_STACK;
 };
 
 function deriveFontStyleFromImage(
@@ -475,19 +503,28 @@ export default function ImageComposer() {
       drawFontSize -= 2;
     }
 
-    const totalTextHeight = lines.length * drawFontSize * fontStyle.lineHeight;
-    const startY = H - fontStyle.paddingY - totalTextHeight / 2;
+    const lineHeights = lines.map((ln) =>
+      (ln.trim() ? 1 : 0.55) * drawFontSize * fontStyle.lineHeight
+    );
+    const totalTextHeight = lineHeights.reduce((sum, h) => sum + h, 0);
+    const rawStartY = H - fontStyle.paddingY - totalTextHeight / 2;
+    const minStart = drawFontSize * 0.75;
+    const maxStart = Math.max(minStart, H - totalTextHeight - drawFontSize * 0.4);
+    const startY = Math.min(Math.max(rawStartY, minStart), maxStart);
 
     ctx.font = `${fontStyle.fontWeight} ${drawFontSize}px ${fontStyle.fontFamily}`;
 
     const isGold = preset === "gold";
     const isStrike = preset === "strike";
     const isBanner = preset === "banner";
+    const isMono = preset === "mono";
     const shadowColor = isGold
       ? "rgba(0,0,0,0.48)"
       : isStrike
       ? "rgba(0,0,0,0.8)"
       : isBanner
+      ? "rgba(0,0,0,0.75)"
+      : isMono
       ? "rgba(0,0,0,0.75)"
       : fontStyle.shadowColor;
     const strokeWidth = isGold
@@ -496,6 +533,8 @@ export default function ImageComposer() {
       ? Math.max(drawFontSize * 0.06, 4.5)
       : isBanner
       ? Math.max(drawFontSize * 0.05, 4.2)
+      : isMono
+      ? Math.max(drawFontSize * 0.06, 4.5)
       : fontStyle.strokeWidth;
     const strokeColor = isGold
       ? "#3b2500"
@@ -503,6 +542,8 @@ export default function ImageComposer() {
       ? "#0c0f1a"
       : isBanner
       ? "#0a0a0a"
+      : isMono
+      ? "#000000"
       : fontStyle.stroke;
 
     // เงา
@@ -513,6 +554,8 @@ export default function ImageComposer() {
       ? 22
       : isBanner
       ? 20
+      : isMono
+      ? 18
       : fontStyle.shadowBlur;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = isGold
@@ -521,15 +564,18 @@ export default function ImageComposer() {
       ? 10
       : isBanner
       ? 12
+      : isMono
+      ? 10
       : fontStyle.shadowOffsetY;
 
     // stroke
     ctx.lineWidth = strokeWidth;
     ctx.strokeStyle = strokeColor;
 
+    let yCursor = startY;
     lines.forEach((ln, idx) => {
-      const y = startY + idx * drawFontSize * fontStyle.lineHeight;
-      ctx.strokeText(ln, W / 2, y);
+      ctx.strokeText(ln, W / 2, yCursor);
+      yCursor += lineHeights[idx];
     });
 
     // fill
@@ -564,12 +610,15 @@ export default function ImageComposer() {
       grad.addColorStop(0.55, "#f2c23a");
       grad.addColorStop(1, "#f2c23a");
       ctx.fillStyle = grad;
+    } else if (isMono) {
+      ctx.fillStyle = "#ffffff";
     } else {
       ctx.fillStyle = fontStyle.fill;
     }
+    yCursor = startY;
     lines.forEach((ln, idx) => {
-      const y = startY + idx * drawFontSize * fontStyle.lineHeight;
-      ctx.fillText(ln, W / 2, y);
+      ctx.fillText(ln, W / 2, yCursor);
+      yCursor += lineHeights[idx];
     });
 
     // reset shadow
@@ -692,9 +741,9 @@ export default function ImageComposer() {
                 className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none"
               />
             </div>
-            <div className="mt-3 grid gap-2 text-xs text-white/70">
-              <label>
-                ขนาดโลโก้: {Math.round(logoSettings.size)} px
+            <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-white/70">
+              <label className="flex flex-col gap-1">
+                <span>ขนาดโลโก้: {Math.round(logoSettings.size)} px</span>
                 <input
                   type="range"
                   min={60}
@@ -707,11 +756,11 @@ export default function ImageComposer() {
                       size: Number(e.target.value),
                     }))
                   }
-                  className="mt-1 w-full accent-emerald-400"
+                  className="w-full accent-emerald-400"
                 />
               </label>
-              <label>
-                Blur: {logoSettings.blur}px
+              <label className="flex flex-col gap-1">
+                <span>Blur: {logoSettings.blur}px</span>
                 <input
                   type="range"
                   min={0}
@@ -724,11 +773,11 @@ export default function ImageComposer() {
                       blur: Number(e.target.value),
                     }))
                   }
-                  className="mt-1 w-full accent-emerald-400"
+                  className="w-full accent-emerald-400"
                 />
               </label>
-              <label>
-                Opacity: {Math.round(logoSettings.opacity * 100)}%
+              <label className="flex flex-col gap-1">
+                <span>Opacity: {Math.round(logoSettings.opacity * 100)}%</span>
                 <input
                   type="range"
                   min={5}
@@ -741,11 +790,11 @@ export default function ImageComposer() {
                       opacity: Number(e.target.value) / 100,
                     }))
                   }
-                  className="mt-1 w-full accent-emerald-400"
+                  className="w-full accent-emerald-400"
                 />
               </label>
-              <label>
-                ระยะจากขอบล่าง: {logoSettings.padding}px
+              <label className="flex flex-col gap-1">
+                <span>ระยะจากขอบล่าง: {logoSettings.padding}px</span>
                 <input
                   type="range"
                   min={10}
@@ -758,7 +807,7 @@ export default function ImageComposer() {
                       padding: Number(e.target.value),
                     }))
                   }
-                  className="mt-1 w-full accent-emerald-400"
+                  className="w-full accent-emerald-400"
                 />
               </label>
             </div>
@@ -797,6 +846,7 @@ export default function ImageComposer() {
                 { key: "gold", label: "ทอง-เหลือง" },
                 { key: "strike", label: "ขาว-แดง" },
                 { key: "banner", label: "แบนเนอร์ดำ-เหลือง" },
+                { key: "mono", label: "ขาวล้วน-สโตคดำ" },
               ].map((opt) => (
                 <button
                   key={opt.key}
@@ -812,23 +862,44 @@ export default function ImageComposer() {
               ))}
             </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              {[
-                { weight: 700, label: "Sarabun Bold" },
-                { weight: 600, label: "Sarabun SemiBold" },
-              ].map((opt) => (
+            <div className="grid gap-2">
+              <div className="text-xs text-white/60">ฟอนต์</div>
+              <div className="grid grid-cols-3 gap-2">
+                {FONT_OPTIONS.map((opt) => (
+                  <button
+                    key={opt.key}
+                    onClick={() =>
+                      setFontStyle((prev) => ({
+                        ...prev,
+                        fontFamily: opt.stack,
+                      }))
+                    }
+                    className={`${
+                      opt.className
+                    } rounded-xl px-3 py-2 text-sm font-semibold ${
+                      fontStyle.fontFamily === opt.stack
+                        ? "bg-white text-black"
+                        : "bg-white/10 text-white hover:bg-white/15"
+                    }`}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2">
+              {FONT_WEIGHT_OPTIONS.map((opt) => (
                 <button
                   key={opt.weight}
                   onClick={() =>
                     setFontStyle((prev) => ({
                       ...prev,
-                      fontFamily: SARABUN_STACK,
                       fontWeight: opt.weight,
                     }))
                   }
                   className={`rounded-xl px-3 py-2 text-sm font-semibold ${
-                    fontStyle.fontWeight === opt.weight &&
-                    fontStyle.fontFamily.includes("Sarabun")
+                    fontStyle.fontWeight === opt.weight
                       ? "bg-white text-black"
                       : "bg-white/10 text-white hover:bg-white/15"
                   }`}
@@ -865,8 +936,8 @@ export default function ImageComposer() {
             </label>
             <input
               type="range"
-              min={60}
-              max={280}
+              min={0}
+              max={1100}
               step={2}
               value={fontStyle.paddingY}
               onChange={(e) =>
@@ -878,7 +949,7 @@ export default function ImageComposer() {
               className="w-full accent-emerald-400"
             />
             <div className="text-xs text-white/60">
-              ระยะจากขอบล่าง: {Math.round(fontStyle.paddingY)} px
+              ปรับค่า 0 (ล่าง) ถึง 1100 (บน): {Math.round(fontStyle.paddingY)} px
             </div>
           </div>
 
