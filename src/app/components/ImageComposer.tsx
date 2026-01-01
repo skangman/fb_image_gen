@@ -107,7 +107,7 @@ type ImageTone = {
   isDark: boolean;
 };
 
-type PresetMode = "adaptive" | "gold" | "strike" | "banner" | "mono";
+type PresetMode = "adaptive" | "gold" | "silver" | "strike" | "banner" | "mono";
 
 const clamp = (v: number, min = 0, max = 255) =>
   Math.min(max, Math.max(min, v));
@@ -524,11 +524,14 @@ export default function ImageComposer() {
     ctx.font = `${fontStyle.fontWeight} ${drawFontSize}px ${fontStyle.fontFamily}`;
 
     const isGold = preset === "gold";
+    const isSilver = preset === "silver";
     const isStrike = preset === "strike";
     const isBanner = preset === "banner";
     const isMono = preset === "mono";
     const shadowColor = isGold
       ? "rgba(0,0,0,0.48)"
+      : isSilver
+      ? "rgba(0,0,0,0.72)"
       : isStrike
       ? "rgba(0,0,0,0.8)"
       : isBanner
@@ -538,6 +541,8 @@ export default function ImageComposer() {
       : fontStyle.shadowColor;
     const strokeWidth = isGold
       ? Math.max(drawFontSize * 0.08, 4.8)
+      : isSilver
+      ? Math.max(drawFontSize * 0.07, 4.6)
       : isStrike
       ? Math.max(drawFontSize * 0.06, 4.5)
       : isBanner
@@ -547,6 +552,8 @@ export default function ImageComposer() {
       : fontStyle.strokeWidth;
     const strokeColor = isGold
       ? "#3b2500"
+      : isSilver
+      ? "#3a3f4a"
       : isStrike
       ? "#0c0f1a"
       : isBanner
@@ -559,6 +566,8 @@ export default function ImageComposer() {
     ctx.shadowColor = shadowColor;
     ctx.shadowBlur = isGold
       ? 18
+      : isSilver
+      ? 24
       : isStrike
       ? 22
       : isBanner
@@ -569,6 +578,8 @@ export default function ImageComposer() {
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = isGold
       ? 8
+      : isSilver
+      ? 11
       : isStrike
       ? 10
       : isBanner
@@ -599,6 +610,19 @@ export default function ImageComposer() {
       grad.addColorStop(0.45, "#f6d57a");
       grad.addColorStop(0.55, "#d6a73a");
       grad.addColorStop(1, "#9a6b1b");
+      ctx.fillStyle = grad;
+    } else if (isSilver) {
+      const grad = ctx.createLinearGradient(
+        W / 2,
+        startY - drawFontSize,
+        W / 2,
+        startY + totalTextHeight + drawFontSize
+      );
+      grad.addColorStop(0, "#ffffff");
+      grad.addColorStop(0.2, "#f1f4fa");
+      grad.addColorStop(0.45, "#d6dce6");
+      grad.addColorStop(0.7, "#e4e8ef");
+      grad.addColorStop(1, "#9099aa");
       ctx.fillStyle = grad;
     } else if (isStrike) {
       const grad = ctx.createLinearGradient(
@@ -867,6 +891,7 @@ export default function ImageComposer() {
               {[
                 { key: "adaptive", label: "สุ่มตามพื้นหลัง" },
                 { key: "gold", label: "ทอง-เหลือง" },
+                { key: "silver", label: "เงินมีมิติ" },
                 { key: "strike", label: "ขาว-แดง" },
                 { key: "banner", label: "แบนเนอร์ดำ-เหลือง" },
                 { key: "mono", label: "ขาวล้วน-สโตคดำ" },
