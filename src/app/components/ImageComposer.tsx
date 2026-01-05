@@ -223,6 +223,7 @@ export default function ImageComposer() {
   const [preset, setPreset] = useState<PresetMode>("adaptive");
   const [logoUrl, setLogoUrl] = useState("");
   const [logoSettings, setLogoSettings] = useState(INITIAL_LOGO_SETTINGS);
+  const [logoPosition, setLogoPosition] = useState<"bottom-left" | "bottom-right">("bottom-right");
 
   // ข้อความในภาพ
   const [text, setText] = useState(DEFAULT_TEXT);
@@ -299,8 +300,8 @@ export default function ImageComposer() {
     const bandH = 320;
     const band = ctx.createLinearGradient(0, H - bandH, 0, H);
     band.addColorStop(0, "rgba(0,0,0,0.00)");
-    band.addColorStop(0.35, "rgba(0,0,0,0.25)");
-    band.addColorStop(1, "rgba(0,0,0,0.78)");
+    band.addColorStop(0.4, "rgba(0,0,0,0.12)");
+    band.addColorStop(1, "rgba(0,0,0,0.42)");
     ctx.fillStyle = band;
     ctx.fillRect(0, H - bandH, W, bandH);
   }
@@ -473,8 +474,11 @@ export default function ImageComposer() {
         const targetW = logoSettings.size;
         const aspect = logoImg.width / logoImg.height || 1;
         const targetH = targetW / aspect;
-        const x = W - targetW - logoSettings.padding;
-        const y = logoSettings.padding;
+        const x =
+          logoPosition === "bottom-right"
+            ? W - targetW - logoSettings.padding
+            : logoSettings.padding;
+        const y = H - targetH - logoSettings.padding;
         ctx.save();
         ctx.globalAlpha = logoSettings.opacity;
         // ใช้ filter blur ให้โลโก้ดูซอฟต์
@@ -790,6 +794,29 @@ export default function ImageComposer() {
             </div>
             <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-white/70">
               <label className="flex flex-col gap-1">
+                <span>ตำแหน่ง</span>
+                <div className="grid grid-cols-2 gap-2">
+                  {[
+                    { key: "bottom-right", label: "ขวาล่าง" },
+                    { key: "bottom-left", label: "ซ้ายล่าง" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.key}
+                      onClick={() =>
+                        setLogoPosition(opt.key as "bottom-left" | "bottom-right")
+                      }
+                      className={`rounded-lg px-3 py-2 font-semibold ${
+                        logoPosition === opt.key
+                          ? "bg-white text-black"
+                          : "bg-white/10 text-white hover:bg-white/15"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+              </label>
+              <label className="flex flex-col gap-1">
                 <span>ขนาดโลโก้: {Math.round(logoSettings.size)} px</span>
                 <input
                   type="range"
@@ -841,7 +868,7 @@ export default function ImageComposer() {
                 />
               </label>
               <label className="flex flex-col gap-1">
-                <span>ระยะจากขอบล่าง: {logoSettings.padding}px</span>
+                <span>ระยะจากขอบล่าง/ซ้าย: {logoSettings.padding}px</span>
                 <input
                   type="range"
                   min={10}
@@ -1016,7 +1043,6 @@ export default function ImageComposer() {
             <button
               className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
               onClick={downloadPNG}
-              disabled={!text.trim()}
             >
               Download PNG (960×1200)
             </button>
