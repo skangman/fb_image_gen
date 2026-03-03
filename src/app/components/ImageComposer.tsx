@@ -108,6 +108,23 @@ type ImageTone = {
 };
 
 type PresetMode = "adaptive" | "gold" | "silver" | "strike" | "banner" | "mono";
+type SectionKey = "canvas" | "media" | "text" | "style";
+type CanvasPreset = "960x1200" | "1:1";
+
+const CANVAS_OPTIONS: Array<{
+  key: CanvasPreset;
+  label: string;
+  width: number;
+  height: number;
+}> = [
+  { key: "960x1200", label: "960×1200", width: 960, height: 1200 },
+  { key: "1:1", label: "1:1 (960×960)", width: 960, height: 960 },
+];
+
+const DEFAULT_CANVAS_PRESET: CanvasPreset = "960x1200";
+
+const getCanvasDimensions = (preset: CanvasPreset) =>
+  CANVAS_OPTIONS.find((opt) => opt.key === preset) ?? CANVAS_OPTIONS[0];
 
 const clamp = (v: number, min = 0, max = 255) =>
   Math.min(max, Math.max(min, v));
@@ -214,16 +231,24 @@ function deriveFontStyleFromImage(
 export default function ImageComposer() {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const W = 960;
-  const H = 1200;
-
   // ภาพที่นำเข้า (ไฟล์) / หรือ URL
   const [imageUrl, setImageUrl] = useState<string>("");
-  const [fileName, setFileName] = useState<string>("fb-post-960x1200.png");
+  const [canvasPreset, setCanvasPreset] = useState<CanvasPreset>(
+    DEFAULT_CANVAS_PRESET
+  );
+  const [outputBaseName, setOutputBaseName] = useState<string>("fb-post");
+  const [pickedImageName, setPickedImageName] = useState<string>("");
   const [preset, setPreset] = useState<PresetMode>("adaptive");
   const [logoUrl, setLogoUrl] = useState("");
+  const [pickedLogoName, setPickedLogoName] = useState<string>("");
   const [logoSettings, setLogoSettings] = useState(INITIAL_LOGO_SETTINGS);
   const [logoPosition, setLogoPosition] = useState<"bottom-left" | "bottom-right">("bottom-right");
+  const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
+    canvas: true,
+    media: true,
+    text: true,
+    style: true,
+  });
 
   // ข้อความในภาพ
   const [text, setText] = useState(DEFAULT_TEXT);
@@ -236,6 +261,8 @@ export default function ImageComposer() {
   const [fontStyle, setFontStyle] = useState<FontStyle>(() =>
     createInitialFontStyle()
   );
+  const { width: W, height: H } = getCanvasDimensions(canvasPreset);
+  const fileName = `${outputBaseName}-${W}x${H}.png`;
 
   function wrapText(
     ctx: CanvasRenderingContext2D,
@@ -670,7 +697,7 @@ export default function ImageComposer() {
     const url = canvas.toDataURL("image/png");
     const a = document.createElement("a");
     a.href = url;
-    a.download = fileName || "fb-post-960x1200.png";
+    a.download = fileName;
     a.click();
   }
 
@@ -678,23 +705,28 @@ export default function ImageComposer() {
     if (!file) return;
     const url = URL.createObjectURL(file);
     setImageUrl(url);
+    setPickedImageName(file.name);
 
     // ตั้งชื่อไฟล์ output ให้ตามไฟล์ต้นทาง
     const base = file.name.replace(/\.[^.]+$/, "");
-    setFileName(`${base}-960x1200.png`);
+    setOutputBaseName(base);
   }
 
   function onPickLogo(file: File | null) {
     if (!file) return;
     const url = URL.createObjectURL(file);
     setLogoUrl(url);
+    setPickedLogoName(file.name);
   }
 
   function resetAll() {
     setImageUrl("");
-    setFileName("fb-post-960x1200.png");
+    setCanvasPreset(DEFAULT_CANVAS_PRESET);
+    setOutputBaseName("fb-post");
+    setPickedImageName("");
     setPreset("adaptive");
     setLogoUrl("");
+    setPickedLogoName("");
     setLogoSettings({ ...INITIAL_LOGO_SETTINGS });
     setText(DEFAULT_TEXT);
     setCaption(DEFAULT_CAPTION);
@@ -702,6 +734,25 @@ export default function ImageComposer() {
     setAiError("");
     setAiLoading(false);
     setFontStyle(createInitialFontStyle());
+    setOpenSections({
+      canvas: true,
+      media: true,
+      text: true,
+      style: true,
+    });
+  }
+
+  function toggleSection(section: SectionKey) {
+    setOpenSections((prev) => ({ ...prev, [section]: !prev[section] }));
+  }
+
+  function setAllSections(isOpen: boolean) {
+    setOpenSections({
+      canvas: isOpen,
+      media: isOpen,
+      text: isOpen,
+      style: isOpen,
+    });
   }
 
   useEffect(() => {
@@ -734,227 +785,64 @@ export default function ImageComposer() {
     };
     run().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [imageUrl, text, fontStyle, preset, logoUrl, logoSettings]);
+  }, [imageUrl, text, fontStyle, preset, logoUrl, logoSettings, canvasPreset]);
 
   return (
-    <div className={`${sarabun.className} grid gap-6 lg:grid-cols-[420px_1fr]`}>
+    <div
+      className={`${sarabun.className} grid h-[calc(100vh-1rem)] items-start gap-2 overflow-hidden sm:grid-cols-[420px_minmax(0,1fr)] xl:grid-cols-[480px_minmax(0,1fr)]`}
+    >
       {/* LEFT: Controls */}
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-5 shadow-sm">
-        <div className="space-y-5">
-          {/* Upload */}
-          <div className="rounded-xl border border-white/10 bg-black/30 p-4">
-            <div className="mb-2 text-sm font-semibold text-white">
-              นำภาพเข้า
-            </div>
+      <div className="h-full rounded-2xl border border-white/10 bg-white/5 p-2.5 shadow-sm">
+        <div className="space-y-2">
+          {/* Actions */}
+          <div className="flex flex-wrap gap-1.5">
+            <button
+              className="rounded-xl bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-black hover:opacity-90"
+              onClick={resetAll}
+            >
+              Reset All
+            </button>
 
-            <input
-              type="file"
-              accept="image/*"
-              className="block w-full text-sm text-white/80 file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-500 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-black hover:file:opacity-90"
-              onChange={(e) => onPickFile(e.target.files?.[0] || null)}
-            />
-
-            <div className="mt-3 grid gap-2">
-              <label className="text-xs text-white/60">
-                หรือใส่ลิงก์รูป (optional)
-              </label>
-              <input
-                value={imageUrl.startsWith("blob:") ? "" : imageUrl}
-                onChange={(e) => setImageUrl(e.target.value.trim())}
-                placeholder="https://.../image.jpg"
-                className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none"
-              />
-              <p className="text-xs text-white/50">
-                แนะนำใช้ Upload ไฟล์จะชัวร์สุด (ไม่ติด CORS)
-              </p>
-            </div>
+            <button
+              className="rounded-xl bg-white px-3 py-1.5 text-xs font-semibold text-black hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              onClick={downloadPNG}
+            >
+              Download PNG ({W}×{H})
+            </button>
+            <button
+              className="rounded-xl bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15"
+              onClick={() => setAllSections(false)}
+            >
+              Collapse All
+            </button>
+            <button
+              className="rounded-xl bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15"
+              onClick={() => setAllSections(true)}
+            >
+              Expand All
+            </button>
           </div>
 
-          {/* Logo */}
-          <div className="rounded-xl border border-white/10 bg-black/30 p-4">
-            <div className="mb-2 text-sm font-semibold text-white">
-              โลโก้ (เบลอ)
-            </div>
-            <input
-              type="file"
-              accept="image/*"
-              className="block w-full text-sm text-white/80 file:mr-3 file:rounded-lg file:border-0 file:bg-white/80 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-black hover:file:opacity-90"
-              onChange={(e) => onPickLogo(e.target.files?.[0] || null)}
-            />
-            <div className="mt-3 grid gap-2">
-              <label className="text-xs text-white/60">
-                หรือใส่ลิงก์โลโก้ (optional)
-              </label>
-              <input
-                value={logoUrl.startsWith("blob:") ? "" : logoUrl}
-                onChange={(e) => setLogoUrl(e.target.value.trim())}
-                placeholder="https://.../logo.png"
-                className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-white outline-none"
-              />
-            </div>
-            <div className="mt-3 grid grid-cols-2 gap-3 text-xs text-white/70">
-              <label className="flex flex-col gap-1">
-                <span>ตำแหน่ง</span>
-                <div className="grid grid-cols-2 gap-2">
-                  {[
-                    { key: "bottom-right", label: "ขวาล่าง" },
-                    { key: "bottom-left", label: "ซ้ายล่าง" },
-                  ].map((opt) => (
-                    <button
-                      key={opt.key}
-                      onClick={() =>
-                        setLogoPosition(opt.key as "bottom-left" | "bottom-right")
-                      }
-                      className={`rounded-lg px-3 py-2 font-semibold ${
-                        logoPosition === opt.key
-                          ? "bg-white text-black"
-                          : "bg-white/10 text-white hover:bg-white/15"
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </label>
-              <label className="flex flex-col gap-1">
-                <span>ขนาดโลโก้: {Math.round(logoSettings.size)} px</span>
-                <input
-                  type="range"
-                  min={60}
-                  max={220}
-                  step={2}
-                  value={logoSettings.size}
-                  onChange={(e) =>
-                    setLogoSettings((prev) => ({
-                      ...prev,
-                      size: Number(e.target.value),
-                    }))
-                  }
-                  className="w-full accent-emerald-400"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span>Blur: {logoSettings.blur}px</span>
-                <input
-                  type="range"
-                  min={0}
-                  max={20}
-                  step={1}
-                  value={logoSettings.blur}
-                  onChange={(e) =>
-                    setLogoSettings((prev) => ({
-                      ...prev,
-                      blur: Number(e.target.value),
-                    }))
-                  }
-                  className="w-full accent-emerald-400"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span>Opacity: {Math.round(logoSettings.opacity * 100)}%</span>
-                <input
-                  type="range"
-                  min={5}
-                  max={80}
-                  step={1}
-                  value={logoSettings.opacity * 100}
-                  onChange={(e) =>
-                    setLogoSettings((prev) => ({
-                      ...prev,
-                      opacity: Number(e.target.value) / 100,
-                    }))
-                  }
-                  className="w-full accent-emerald-400"
-                />
-              </label>
-              <label className="flex flex-col gap-1">
-                <span>ระยะจากขอบล่าง/ซ้าย: {logoSettings.padding}px</span>
-                <input
-                  type="range"
-                  min={10}
-                  max={160}
-                  step={2}
-                  value={logoSettings.padding}
-                  onChange={(e) =>
-                    setLogoSettings((prev) => ({
-                      ...prev,
-                      padding: Number(e.target.value),
-                    }))
-                  }
-                  className="w-full accent-emerald-400"
-                />
-              </label>
-            </div>
-          </div>
-
-          {/* Text */}
-          <div>
-            <label className="mb-2 block text-sm text-white/80">
-              ข้อความในภาพ (ตรวจคำแล้ว)
-            </label>
-            <textarea
-              className="min-h-[120px] w-full resize-none rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white outline-none"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="พิมพ์ข้อความไทยที่ต้องการให้ขึ้นในภาพ..."
-            />
-
-            <div className="mt-2 flex gap-2">
-              <button
-                className="rounded-xl bg-white/10 px-3 py-2 text-sm text-white hover:bg-white/15"
-                onClick={() => setText(DEFAULT_TEXT)}
-              >
-                รีเซ็ตข้อความ
-              </button>
-            </div>
-          </div>
-
-          {/* Preset & size */}
-          <div className="grid gap-3 rounded-xl border border-white/10 bg-black/25 p-4">
-            <div className="text-sm font-semibold text-white">
-              สไตล์ตัวหนังสือ
-            </div>
-            <div className="grid grid-cols-3 gap-2">
-              {[
-                { key: "adaptive", label: "สุ่มตามพื้นหลัง" },
-                { key: "gold", label: "ทอง-เหลือง" },
-                { key: "silver", label: "เงินมีมิติ" },
-                { key: "strike", label: "ขาว-แดง" },
-                { key: "banner", label: "แบนเนอร์ดำ-เหลือง" },
-                { key: "mono", label: "ขาวล้วน-สโตคดำ" },
-              ].map((opt) => (
-                <button
-                  key={opt.key}
-                  onClick={() => setPreset(opt.key as PresetMode)}
-                  className={`rounded-xl px-3 py-2 ${
-                    opt.label.length > 10 ? "text-xs" : "text-sm"
-                  } font-semibold ${
-                    preset === opt.key
-                      ? "bg-emerald-500 text-black"
-                      : "bg-white/10 text-white hover:bg-white/15"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-
-            <div className="grid gap-2">
-              <div className="text-xs text-white/60">ฟอนต์</div>
-              <div className="grid grid-cols-3 gap-2">
-                {FONT_OPTIONS.map((opt) => (
+          {/* Canvas Size */}
+          <div className="rounded-xl border border-white/10 bg-black/25 p-2.5">
+            <button
+              type="button"
+              onClick={() => toggleSection("canvas")}
+              className="flex w-full items-center justify-between text-left"
+            >
+              <span className="text-sm font-semibold text-white">Canvas Size</span>
+              <span className="text-xs text-white/60">
+                {openSections.canvas ? "Collapse" : "Expand"}
+              </span>
+            </button>
+            {openSections.canvas && (
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                {CANVAS_OPTIONS.map((opt) => (
                   <button
                     key={opt.key}
-                    onClick={() =>
-                      setFontStyle((prev) => ({
-                        ...prev,
-                        fontFamily: opt.stack,
-                      }))
-                    }
-                    className={`${
-                      opt.className
-                    } rounded-xl px-3 py-2 text-sm font-semibold ${
-                      fontStyle.fontFamily === opt.stack
+                    onClick={() => setCanvasPreset(opt.key)}
+                    className={`rounded-xl px-2 py-1.5 text-sm font-semibold ${
+                      canvasPreset === opt.key
                         ? "bg-white text-black"
                         : "bg-white/10 text-white hover:bg-white/15"
                     }`}
@@ -963,109 +851,356 @@ export default function ImageComposer() {
                   </button>
                 ))}
               </div>
-            </div>
+            )}
+          </div>
 
-            <div className="grid grid-cols-3 gap-2">
-              {FONT_WEIGHT_OPTIONS.map((opt) => (
-                <button
-                  key={opt.weight}
-                  onClick={() =>
+          {/* Upload + Logo */}
+          <div className="rounded-xl border border-white/10 bg-black/30 p-2.5">
+            <button
+              type="button"
+              onClick={() => toggleSection("media")}
+              className="flex w-full items-center justify-between text-left"
+            >
+              <span className="text-sm font-semibold text-white">
+                นำภาพเข้า + โลโก้ (เบลอ)
+              </span>
+              <span className="text-xs text-white/60">
+                {openSections.media ? "Collapse" : "Expand"}
+              </span>
+            </button>
+            {openSections.media && (
+              <div className="mt-2 grid grid-cols-2 gap-3">
+                <div>
+                  <div className="mb-1 text-xs font-semibold text-white/80">
+                    ภาพหลัก
+                  </div>
+                  <input
+                    id="main-image-upload"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => onPickFile(e.target.files?.[0] || null)}
+                  />
+                  <div className="flex items-center gap-2">
+                    <label
+                      htmlFor="main-image-upload"
+                      className="cursor-pointer rounded-lg bg-emerald-500 px-4 py-2 text-sm font-semibold text-black hover:opacity-90"
+                    >
+                      Choose file
+                    </label>
+                    <span className="min-w-0 flex-1 truncate text-xs text-white/60">
+                      {pickedImageName || "ยังไม่ได้เลือกไฟล์"}
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <div className="mb-1 text-xs font-semibold text-white/80">
+                    โลโก้
+                  </div>
+                  <input
+                    id="logo-image-upload"
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={(e) => onPickLogo(e.target.files?.[0] || null)}
+                  />
+                  <div className="flex items-center gap-2">
+                    <label
+                      htmlFor="logo-image-upload"
+                      className="cursor-pointer rounded-lg bg-white/80 px-4 py-2 text-sm font-semibold text-black hover:opacity-90"
+                    >
+                      Choose file
+                    </label>
+                    <span className="min-w-0 flex-1 truncate text-xs text-white/60">
+                      {pickedLogoName || "ยังไม่ได้เลือกไฟล์"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="col-span-2 mt-1 grid grid-cols-2 gap-2 text-xs text-white/70">
+                  <label className="flex flex-col gap-1">
+                    <span>ตำแหน่ง</span>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { key: "bottom-right", label: "ขวาล่าง" },
+                        { key: "bottom-left", label: "ซ้ายล่าง" },
+                      ].map((opt) => (
+                        <button
+                          key={opt.key}
+                          onClick={() =>
+                            setLogoPosition(
+                              opt.key as "bottom-left" | "bottom-right"
+                            )
+                          }
+                          className={`rounded-lg px-3 py-2 font-semibold ${
+                            logoPosition === opt.key
+                              ? "bg-white text-black"
+                              : "bg-white/10 text-white hover:bg-white/15"
+                          }`}
+                        >
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span>ขนาดโลโก้: {Math.round(logoSettings.size)} px</span>
+                    <input
+                      type="range"
+                      min={60}
+                      max={220}
+                      step={2}
+                      value={logoSettings.size}
+                      onChange={(e) =>
+                        setLogoSettings((prev) => ({
+                          ...prev,
+                          size: Number(e.target.value),
+                        }))
+                      }
+                      className="w-full accent-emerald-400"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span>Blur: {logoSettings.blur}px</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={20}
+                      step={1}
+                      value={logoSettings.blur}
+                      onChange={(e) =>
+                        setLogoSettings((prev) => ({
+                          ...prev,
+                          blur: Number(e.target.value),
+                        }))
+                      }
+                      className="w-full accent-emerald-400"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1">
+                    <span>Opacity: {Math.round(logoSettings.opacity * 100)}%</span>
+                    <input
+                      type="range"
+                      min={5}
+                      max={80}
+                      step={1}
+                      value={logoSettings.opacity * 100}
+                      onChange={(e) =>
+                        setLogoSettings((prev) => ({
+                          ...prev,
+                          opacity: Number(e.target.value) / 100,
+                        }))
+                      }
+                      className="w-full accent-emerald-400"
+                    />
+                  </label>
+                  <label className="col-span-2 flex flex-col gap-1">
+                    <span>ระยะจากขอบล่าง/ซ้าย: {logoSettings.padding}px</span>
+                    <input
+                      type="range"
+                      min={10}
+                      max={160}
+                      step={2}
+                      value={logoSettings.padding}
+                      onChange={(e) =>
+                        setLogoSettings((prev) => ({
+                          ...prev,
+                          padding: Number(e.target.value),
+                        }))
+                      }
+                      className="w-full accent-emerald-400"
+                    />
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Text */}
+          <div className="rounded-xl border border-white/10 bg-black/30 p-2.5">
+            <button
+              type="button"
+              onClick={() => toggleSection("text")}
+              className="flex w-full items-center justify-between text-left"
+            >
+              <span className="text-sm font-semibold text-white">
+                ข้อความในภาพ (ตรวจคำแล้ว)
+              </span>
+              <span className="text-xs text-white/60">
+                {openSections.text ? "Collapse" : "Expand"}
+              </span>
+            </button>
+            {openSections.text && (
+              <div className="mt-2">
+                <textarea
+                  className="min-h-[84px] w-full resize-none rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-white outline-none"
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder="พิมพ์ข้อความไทยที่ต้องการให้ขึ้นในภาพ..."
+                />
+
+                <div className="mt-1.5 flex gap-2">
+                  <button
+                    className="rounded-xl bg-white/10 px-2.5 py-1.5 text-xs text-white hover:bg-white/15"
+                    onClick={() => setText(DEFAULT_TEXT)}
+                  >
+                    รีเซ็ตข้อความ
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Preset & size */}
+          <div className="rounded-xl border border-white/10 bg-black/25 p-2.5">
+            <button
+              type="button"
+              onClick={() => toggleSection("style")}
+              className="flex w-full items-center justify-between text-left"
+            >
+              <span className="text-sm font-semibold text-white">
+                สไตล์ตัวหนังสือ
+              </span>
+              <span className="text-xs text-white/60">
+                {openSections.style ? "Collapse" : "Expand"}
+              </span>
+            </button>
+            {openSections.style && (
+              <div className="mt-2 grid gap-1.5">
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { key: "adaptive", label: "สุ่มตามพื้นหลัง" },
+                    { key: "gold", label: "ทอง-เหลือง" },
+                    { key: "silver", label: "เงินมีมิติ" },
+                    { key: "strike", label: "ขาว-แดง" },
+                    { key: "banner", label: "แบนเนอร์ดำ-เหลือง" },
+                    { key: "mono", label: "ขาวล้วน-สโตคดำ" },
+                  ].map((opt) => (
+                    <button
+                      key={opt.key}
+                      onClick={() => setPreset(opt.key as PresetMode)}
+                      className={`rounded-xl px-2 py-1.5 ${
+                        opt.label.length > 10 ? "text-xs" : "text-sm"
+                      } font-semibold ${
+                        preset === opt.key
+                          ? "bg-emerald-500 text-black"
+                          : "bg-white/10 text-white hover:bg-white/15"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid gap-2">
+                  <div className="text-xs text-white/60">ฟอนต์</div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {FONT_OPTIONS.map((opt) => (
+                      <button
+                        key={opt.key}
+                        onClick={() =>
+                          setFontStyle((prev) => ({
+                            ...prev,
+                            fontFamily: opt.stack,
+                          }))
+                        }
+                        className={`${
+                          opt.className
+                        } rounded-xl px-2 py-1 text-sm font-semibold ${
+                          fontStyle.fontFamily === opt.stack
+                            ? "bg-white text-black"
+                            : "bg-white/10 text-white hover:bg-white/15"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  {FONT_WEIGHT_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.weight}
+                      onClick={() =>
+                        setFontStyle((prev) => ({
+                          ...prev,
+                          fontWeight: opt.weight,
+                        }))
+                      }
+                      className={`rounded-xl px-2 py-1 text-sm font-semibold ${
+                        fontStyle.fontWeight === opt.weight
+                          ? "bg-white text-black"
+                          : "bg-white/10 text-white hover:bg-white/15"
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+
+                <label className="text-xs text-white/60">
+                  ขนาดตัวอักษรพื้นฐาน (จะปรับลงอัตโนมัติถ้าบรรทัดยาว)
+                </label>
+                <input
+                  type="range"
+                  min={34}
+                  max={120}
+                  step={1}
+                  value={fontStyle.size}
+                  onChange={(e) =>
                     setFontStyle((prev) => ({
                       ...prev,
-                      fontWeight: opt.weight,
+                      size: Number(e.target.value),
+                      strokeWidth: Math.max(3, Number(e.target.value) * 0.06),
                     }))
                   }
-                  className={`rounded-xl px-3 py-2 text-sm font-semibold ${
-                    fontStyle.fontWeight === opt.weight
-                      ? "bg-white text-black"
-                      : "bg-white/10 text-white hover:bg-white/15"
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
+                  className="w-full accent-emerald-400"
+                />
+                <div className="text-xs text-white/60">
+                  ตอนนี้: {Math.round(fontStyle.size)} px
+                </div>
 
-            <label className="text-xs text-white/60">
-              ขนาดตัวอักษรพื้นฐาน (จะปรับลงอัตโนมัติถ้าบรรทัดยาว)
-            </label>
-            <input
-              type="range"
-              min={34}
-              max={120}
-              step={1}
-              value={fontStyle.size}
-              onChange={(e) =>
-                setFontStyle((prev) => ({
-                  ...prev,
-                  size: Number(e.target.value),
-                  strokeWidth: Math.max(3, Number(e.target.value) * 0.06),
-                }))
-              }
-              className="w-full accent-emerald-400"
-            />
-            <div className="text-xs text-white/60">
-              ตอนนี้: {Math.round(fontStyle.size)} px
-            </div>
-
-            <label className="mt-2 text-xs text-white/60">
-              ตำแหน่งแนวตั้ง (เพิ่ม = ขึ้นสูง)
-            </label>
-            <input
-              type="range"
-              min={0}
-              max={1100}
-              step={2}
-              value={fontStyle.paddingY}
-              onChange={(e) =>
-                setFontStyle((prev) => ({
-                  ...prev,
-                  paddingY: Number(e.target.value),
-                }))
-              }
-              className="w-full accent-emerald-400"
-            />
-            <div className="text-xs text-white/60">
-              ปรับค่า 0 (ล่าง) ถึง 1100 (บน): {Math.round(fontStyle.paddingY)}{" "}
-              px
-            </div>
+                <label className="mt-2 text-xs text-white/60">
+                  ตำแหน่งแนวตั้ง (เพิ่ม = ขึ้นสูง)
+                </label>
+                <input
+                  type="range"
+                  min={0}
+                  max={1100}
+                  step={2}
+                  value={fontStyle.paddingY}
+                  onChange={(e) =>
+                    setFontStyle((prev) => ({
+                      ...prev,
+                      paddingY: Number(e.target.value),
+                    }))
+                  }
+                  className="w-full accent-emerald-400"
+                />
+                <div className="text-xs text-white/60">
+                  ปรับค่า 0 (ล่าง) ถึง 1100 (บน):{" "}
+                  {Math.round(fontStyle.paddingY)} px
+                </div>
+              </div>
+            )}
           </div>
 
-          {/* Actions */}
-          <div className="flex gap-2 pt-1">
-            <button
-              className="rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-black hover:opacity-90"
-              onClick={resetAll}
-            >
-              Reset All
-            </button>
-
-            <button
-              className="rounded-xl bg-white px-4 py-2 text-sm font-semibold text-black hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
-              onClick={downloadPNG}
-            >
-              Download PNG (960×1200)
-            </button>
-          </div>
-
-          <div className="text-xs text-white/50">
-            หมายเหตุ: ถ้าอยากได้ตำแหน่ง/ขนาดตัวอักษรแบบอื่น บอกผมได้
-            เดี๋ยวปรับให้
-          </div>
         </div>
       </div>
 
       {/* RIGHT: Preview */}
-      <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-        <div className="mb-3">
+      <div className="h-full rounded-2xl border border-white/10 bg-white/5 p-2.5 sm:flex sm:flex-col">
+        <div className="mb-2">
           <div className="text-sm text-white/70">Preview</div>
-          <div className="text-xs text-white/50">Canvas: 960×1200</div>
+          <div className="text-xs text-white/50">Canvas: {W}×{H}</div>
         </div>
 
-        <div className="flex justify-center">
+        <div className="flex justify-center sm:flex-1 sm:items-start">
           <canvas
             ref={canvasRef}
-            className="h-auto w-full max-w-[480px] rounded-2xl border border-white/10 bg-black"
+            className="h-auto max-h-[calc(100vh-6.5rem)] w-full max-w-[400px] rounded-2xl border border-white/10 bg-black lg:max-w-[440px]"
           />
         </div>
       </div>
