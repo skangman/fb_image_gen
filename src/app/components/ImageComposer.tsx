@@ -1,9 +1,13 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { Kanit, Prompt as PromptFont, Sarabun } from "next/font/google";
+import {
+  Kanit,
+  Maitree,
+  Sarabun,
+} from "next/font/google";
 
-const DEFAULT_TEXT = "พิมพ์ข้อความตรงนี้…";
+const DEFAULT_TEXT = "";
 const DEFAULT_CAPTION = "แคปชั่นโพสต์ใหม่....";
 
 const THAI_FONT_FALLBACK =
@@ -21,8 +25,8 @@ const kanit = Kanit({
   display: "swap",
 });
 
-const promptFont = PromptFont({
-  weight: ["600", "700", "800"],
+const maitree = Maitree({
+  weight: ["600", "700"],
   subsets: ["latin", "thai"],
   display: "swap",
 });
@@ -37,7 +41,7 @@ const buildStackFromFont = (
 
 const SARABUN_STACK = buildStackFromFont(sarabun, "Sarabun");
 const KANIT_STACK = buildStackFromFont(kanit, "Kanit");
-const PROMPT_STACK = buildStackFromFont(promptFont, "Prompt");
+const MAITREE_STACK = buildStackFromFont(maitree, "Maitree");
 
 const FONT_OPTIONS = [
   {
@@ -51,6 +55,12 @@ const FONT_OPTIONS = [
     label: "Kanit",
     stack: KANIT_STACK,
     className: kanit.className,
+  },
+  {
+    key: "maitree",
+    label: "Maitree",
+    stack: MAITREE_STACK,
+    className: maitree.className,
   },
 ];
 
@@ -107,9 +117,26 @@ type ImageTone = {
   isDark: boolean;
 };
 
-type PresetMode = "adaptive" | "gold" | "silver" | "strike" | "banner" | "mono";
+type PresetMode =
+  | "adaptive"
+  | "custom"
+  | "gold"
+  | "silver"
+  | "strike"
+  | "banner"
+  | "mono";
 type SectionKey = "canvas" | "media" | "text" | "style";
 type CanvasPreset = "960x1200" | "1:1";
+type TextColorPreset = {
+  key: string;
+  label: string;
+  swatch: string;
+  preset?: PresetMode;
+  fill?: string;
+  stroke?: string;
+  shadowColor?: string;
+  strokeWidth?: number;
+};
 
 const CANVAS_OPTIONS: Array<{
   key: CanvasPreset;
@@ -122,6 +149,66 @@ const CANVAS_OPTIONS: Array<{
 ];
 
 const DEFAULT_CANVAS_PRESET: CanvasPreset = "960x1200";
+const DEFAULT_STYLE_COLORS = {
+  fill: "#F5F7FF",
+  stroke: "#7A0D1B",
+  shadowColor: "rgba(0,0,0,0.55)",
+  strokeWidth: 3,
+};
+
+const TEXT_COLOR_PRESETS: TextColorPreset[] = [
+  {
+    key: "default",
+    label: "Default",
+    swatch: "linear-gradient(135deg, #f5f7ff 0%, #c7d2fe 100%)",
+    fill: DEFAULT_STYLE_COLORS.fill,
+    stroke: DEFAULT_STYLE_COLORS.stroke,
+    shadowColor: DEFAULT_STYLE_COLORS.shadowColor,
+    strokeWidth: DEFAULT_STYLE_COLORS.strokeWidth,
+  },
+  {
+    key: "gold",
+    label: "Gold",
+    swatch: "linear-gradient(135deg, #f6d57a 0%, #a7741e 100%)",
+    preset: "gold",
+  },
+  {
+    key: "ice",
+    label: "Ice",
+    swatch: "linear-gradient(135deg, #ffffff 0%, #b5d8ff 100%)",
+    fill: "#F2F8FF",
+    stroke: "#245A8A",
+    shadowColor: "rgba(5,22,45,0.6)",
+    strokeWidth: 3.4,
+  },
+  {
+    key: "mint",
+    label: "Mint",
+    swatch: "linear-gradient(135deg, #d7ffe8 0%, #3dbb7a 100%)",
+    fill: "#E8FFF1",
+    stroke: "#0E6A44",
+    shadowColor: "rgba(0,0,0,0.55)",
+    strokeWidth: 3.4,
+  },
+  {
+    key: "sunset",
+    label: "Sunset",
+    swatch: "linear-gradient(135deg, #ffe0bf 0%, #ff7f50 100%)",
+    fill: "#FFE9D0",
+    stroke: "#A14A1A",
+    shadowColor: "rgba(0,0,0,0.6)",
+    strokeWidth: 3.4,
+  },
+  {
+    key: "rose",
+    label: "Rose",
+    swatch: "linear-gradient(135deg, #ffe5ea 0%, #db6f86 100%)",
+    fill: "#FFEFF3",
+    stroke: "#8A1F3C",
+    shadowColor: "rgba(0,0,0,0.58)",
+    strokeWidth: 3.4,
+  },
+];
 
 const getCanvasDimensions = (preset: CanvasPreset) =>
   CANVAS_OPTIONS.find((opt) => opt.key === preset) ?? CANVAS_OPTIONS[0];
@@ -244,10 +331,10 @@ export default function ImageComposer() {
   const [logoSettings, setLogoSettings] = useState(INITIAL_LOGO_SETTINGS);
   const [logoPosition, setLogoPosition] = useState<"bottom-left" | "bottom-right">("bottom-right");
   const [openSections, setOpenSections] = useState<Record<SectionKey, boolean>>({
-    canvas: true,
-    media: true,
-    text: true,
-    style: true,
+    canvas: false,
+    media: false,
+    text: false,
+    style: false,
   });
 
   // ข้อความในภาพ
@@ -735,10 +822,10 @@ export default function ImageComposer() {
     setAiLoading(false);
     setFontStyle(createInitialFontStyle());
     setOpenSections({
-      canvas: true,
-      media: true,
-      text: true,
-      style: true,
+      canvas: false,
+      media: false,
+      text: false,
+      style: false,
     });
   }
 
@@ -753,6 +840,31 @@ export default function ImageComposer() {
       text: isOpen,
       style: isOpen,
     });
+  }
+
+  function applyTextColorPreset(presetOpt: TextColorPreset) {
+    if (presetOpt.preset) {
+      setPreset(presetOpt.preset);
+      return;
+    }
+
+    setPreset("custom");
+    setFontStyle((prev) => ({
+      ...prev,
+      fill: presetOpt.fill ?? prev.fill,
+      stroke: presetOpt.stroke ?? prev.stroke,
+      shadowColor: presetOpt.shadowColor ?? prev.shadowColor,
+      strokeWidth: presetOpt.strokeWidth ?? prev.strokeWidth,
+    }));
+  }
+
+  function isTextColorPresetActive(presetOpt: TextColorPreset) {
+    if (presetOpt.preset) return preset === presetOpt.preset;
+    return (
+      preset === "custom" &&
+      presetOpt.fill === fontStyle.fill &&
+      presetOpt.stroke === fontStyle.stroke
+    );
   }
 
   useEffect(() => {
@@ -792,7 +904,7 @@ export default function ImageComposer() {
       className={`${sarabun.className} grid h-[calc(100vh-1rem)] items-start gap-2 overflow-hidden sm:grid-cols-[420px_minmax(0,1fr)] xl:grid-cols-[480px_minmax(0,1fr)]`}
     >
       {/* LEFT: Controls */}
-      <div className="h-full rounded-2xl border border-white/10 bg-white/5 p-2.5 shadow-sm">
+      <div className="min-h-0 h-full overflow-y-auto rounded-2xl border border-white/10 bg-white/5 p-2.5 shadow-sm">
         <div className="space-y-2">
           {/* Actions */}
           <div className="flex flex-wrap gap-1.5">
@@ -1068,29 +1180,32 @@ export default function ImageComposer() {
             </button>
             {openSections.style && (
               <div className="mt-2 grid gap-1.5">
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { key: "adaptive", label: "สุ่มตามพื้นหลัง" },
-                    { key: "gold", label: "ทอง-เหลือง" },
-                    { key: "silver", label: "เงินมีมิติ" },
-                    { key: "strike", label: "ขาว-แดง" },
-                    { key: "banner", label: "แบนเนอร์ดำ-เหลือง" },
-                    { key: "mono", label: "ขาวล้วน-สโตคดำ" },
-                  ].map((opt) => (
-                    <button
-                      key={opt.key}
-                      onClick={() => setPreset(opt.key as PresetMode)}
-                      className={`rounded-xl px-2 py-1.5 ${
-                        opt.label.length > 10 ? "text-xs" : "text-sm"
-                      } font-semibold ${
-                        preset === opt.key
-                          ? "bg-emerald-500 text-black"
-                          : "bg-white/10 text-white hover:bg-white/15"
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
+                <div className="grid gap-2">
+                  <div className="text-xs text-white/60">
+                    โทนสีตัวหนังสือ (จิ้มเลือก)
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {TEXT_COLOR_PRESETS.map((opt) => (
+                      <button
+                        type="button"
+                        key={opt.key}
+                        onClick={() => applyTextColorPreset(opt)}
+                        className={`rounded-xl border px-2 py-1.5 text-xs font-semibold ${
+                          isTextColorPresetActive(opt)
+                            ? "border-emerald-400 bg-white/15 text-white"
+                            : "border-white/10 bg-white/10 text-white hover:bg-white/15"
+                        }`}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <span
+                            className="h-3.5 w-3.5 rounded-full border border-white/30"
+                            style={{ background: opt.swatch }}
+                          />
+                          {opt.label}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="grid gap-2">
@@ -1098,6 +1213,7 @@ export default function ImageComposer() {
                   <div className="grid grid-cols-3 gap-2">
                     {FONT_OPTIONS.map((opt) => (
                       <button
+                        type="button"
                         key={opt.key}
                         onClick={() =>
                           setFontStyle((prev) => ({
@@ -1122,6 +1238,7 @@ export default function ImageComposer() {
                 <div className="grid grid-cols-3 gap-2">
                   {FONT_WEIGHT_OPTIONS.map((opt) => (
                     <button
+                      type="button"
                       key={opt.weight}
                       onClick={() =>
                         setFontStyle((prev) => ({
