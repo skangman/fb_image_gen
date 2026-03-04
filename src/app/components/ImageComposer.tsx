@@ -82,6 +82,7 @@ const INITIAL_LOGO_SETTINGS = {
 const createInitialFontStyle = (): FontStyle => ({
   size: 54,
   lineHeight: 1.22,
+  letterSpacing: 0,
   paddingX: 80,
   paddingY: 90,
   fontWeight: 700,
@@ -99,6 +100,7 @@ type RGB = { r: number; g: number; b: number };
 type FontStyle = {
   size: number;
   lineHeight: number;
+  letterSpacing: number;
   paddingX: number;
   paddingY: number;
   fontWeight: number;
@@ -167,6 +169,24 @@ const TEXT_COLOR_PRESETS: TextColorPreset[] = [
     strokeWidth: DEFAULT_STYLE_COLORS.strokeWidth,
   },
   {
+    key: "white",
+    label: "White",
+    swatch: "#ffffff",
+    fill: "#FFFFFF",
+    stroke: "#000000",
+    shadowColor: "transparent",
+    strokeWidth: 3,
+  },
+  {
+    key: "black",
+    label: "Black",
+    swatch: "#000000",
+    fill: "#000000",
+    stroke: "#FFFFFF",
+    shadowColor: "transparent",
+    strokeWidth: 3,
+  },
+  {
     key: "gold",
     label: "Gold",
     swatch: "linear-gradient(135deg, #f6d57a 0%, #a7741e 100%)",
@@ -229,6 +249,80 @@ const adjustColor = (color: RGB, delta: number): RGB => ({
 });
 
 const getLuminance = ({ r, g, b }: RGB) => 0.299 * r + 0.587 * g + 0.114 * b;
+
+const GRAPHEME_SEGMENTER =
+  typeof Intl !== "undefined" && "Segmenter" in Intl
+    ? new (Intl as unknown as { Segmenter: typeof Intl.Segmenter }).Segmenter(
+        "th",
+        { granularity: "grapheme" }
+      )
+    : null;
+
+const splitGraphemes = (text: string) => {
+  if (!text) return [];
+  if (!GRAPHEME_SEGMENTER) return Array.from(text);
+  return Array.from(
+    GRAPHEME_SEGMENTER.segment(text),
+    (part: { segment: string }) => part.segment
+  );
+};
+
+const measureTextWidthWithSpacing = (
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  letterSpacing: number
+) => {
+  if (!text) return 0;
+  if (letterSpacing <= 0) return ctx.measureText(text).width;
+
+  const graphemes = splitGraphemes(text);
+  if (graphemes.length <= 1) return ctx.measureText(text).width;
+
+  const textWidth = graphemes.reduce(
+    (sum, unit) => sum + ctx.measureText(unit).width,
+    0
+  );
+  return textWidth + letterSpacing * (graphemes.length - 1);
+};
+
+const drawTextLineWithSpacing = (
+  ctx: CanvasRenderingContext2D,
+  line: string,
+  centerX: number,
+  y: number,
+  mode: "stroke" | "fill",
+  letterSpacing: number
+) => {
+  if (!line) return;
+  if (letterSpacing <= 0) {
+    if (mode === "stroke") ctx.strokeText(line, centerX, y);
+    else ctx.fillText(line, centerX, y);
+    return;
+  }
+
+  const graphemes = splitGraphemes(line);
+  if (graphemes.length <= 1) {
+    if (mode === "stroke") ctx.strokeText(line, centerX, y);
+    else ctx.fillText(line, centerX, y);
+    return;
+  }
+
+  const glyphWidths = graphemes.map((unit) => ctx.measureText(unit).width);
+  const totalWidth =
+    glyphWidths.reduce((sum, width) => sum + width, 0) +
+    letterSpacing * (graphemes.length - 1);
+  let cursorX = centerX - totalWidth / 2;
+  const prevAlign = ctx.textAlign;
+  ctx.textAlign = "left";
+
+  graphemes.forEach((unit, idx) => {
+    if (mode === "stroke") ctx.strokeText(unit, cursorX, y);
+    else ctx.fillText(unit, cursorX, y);
+    cursorX += glyphWidths[idx] + letterSpacing;
+  });
+
+  ctx.textAlign = prevAlign;
+};
 
 function analyzeImageColors(image: HTMLImageElement): ImageTone | null {
   const sampleSize = 64;
@@ -354,7 +448,8 @@ export default function ImageComposer() {
   function wrapText(
     ctx: CanvasRenderingContext2D,
     text: string,
-    maxWidth: number
+    maxWidth: number,
+    letterSpacing: number
   ) {
     const lines: string[] = [];
     const paragraphs = text.replace(/\r/g, "").split("\n");
@@ -365,7 +460,7 @@ export default function ImageComposer() {
       const hasSpace = paragraph.includes(" ");
       const tokens = hasSpace
         ? paragraph.split(" ").filter(Boolean)
-        : paragraph.split("").filter(Boolean);
+        : splitGraphemes(paragraph).filter(Boolean);
 
       let line = "";
       for (let i = 0; i < tokens.length; i++) {
@@ -375,8 +470,12 @@ export default function ImageComposer() {
             ? `${line} ${piece}`
             : `${line}${piece}`
           : piece;
-        const m = ctx.measureText(testLine);
-        if (m.width > maxWidth && line) {
+        const textWidth = measureTextWidthWithSpacing(
+          ctx,
+          testLine,
+          letterSpacing
+        );
+        if (textWidth > maxWidth && line) {
           lines.push(line);
           line = piece;
         } else {
@@ -617,9 +716,18 @@ export default function ImageComposer() {
 
     while (drawFontSize >= 34) {
       ctx.font = `${fontStyle.fontWeight} ${drawFontSize}px ${fontStyle.fontFamily}`;
-      const candidate = wrapText(ctx, safeText, maxTextWidth);
+      const candidate = wrapText(
+        ctx,
+        safeText,
+        maxTextWidth,
+        fontStyle.letterSpacing
+      );
       const longest = candidate.reduce(
-        (acc, ln) => Math.max(acc, ctx.measureText(ln).width),
+        (acc, ln) =>
+          Math.max(
+            acc,
+            measureTextWidthWithSpacing(ctx, ln, fontStyle.letterSpacing)
+          ),
         0
       );
       lines = candidate;
@@ -712,7 +820,14 @@ export default function ImageComposer() {
 
     let yCursor = startY;
     lines.forEach((ln, idx) => {
-      ctx.strokeText(ln, W / 2, yCursor);
+      drawTextLineWithSpacing(
+        ctx,
+        ln,
+        W / 2,
+        yCursor,
+        "stroke",
+        fontStyle.letterSpacing
+      );
       yCursor += lineHeights[idx];
     });
 
@@ -768,7 +883,14 @@ export default function ImageComposer() {
     }
     yCursor = startY;
     lines.forEach((ln, idx) => {
-      ctx.fillText(ln, W / 2, yCursor);
+      drawTextLineWithSpacing(
+        ctx,
+        ln,
+        W / 2,
+        yCursor,
+        "fill",
+        fontStyle.letterSpacing
+      );
       yCursor += lineHeights[idx];
     });
 
@@ -1277,6 +1399,27 @@ export default function ImageComposer() {
                 />
                 <div className="text-xs text-white/60">
                   ตอนนี้: {Math.round(fontStyle.size)} px
+                </div>
+
+                <label className="mt-2 text-xs text-white/60">
+                  ระยะห่างตัวอักษร
+                </label>
+                <input
+                  type="range"
+                  min={0}
+                  max={12}
+                  step={0.2}
+                  value={fontStyle.letterSpacing}
+                  onChange={(e) =>
+                    setFontStyle((prev) => ({
+                      ...prev,
+                      letterSpacing: Number(e.target.value),
+                    }))
+                  }
+                  className="w-full accent-emerald-400"
+                />
+                <div className="text-xs text-white/60">
+                  ตอนนี้: {fontStyle.letterSpacing.toFixed(1)} px
                 </div>
 
                 <label className="mt-2 text-xs text-white/60">
