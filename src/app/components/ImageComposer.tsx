@@ -73,10 +73,10 @@ const FONT_WEIGHT_OPTIONS = [
 ];
 
 const INITIAL_LOGO_SETTINGS = {
-  size: 120,
-  opacity: 0.35,
+  size: 86,
+  opacity: 0.8,
   blur: 1,
-  padding: 40,
+  padding: 16,
 };
 
 const createInitialFontStyle = (): FontStyle => ({
